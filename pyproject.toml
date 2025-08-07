@@ -1,0 +1,42 @@
+[tool.poetry]
+name = "shootflow-infra"
+version = "0.1.0"
+description = "AWS CDK Infrastructure for the Shootflow project."
+authors = ["Corey Leopold <cleopold73@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+homepage = "https://github.com/yourusername/shootflow-infra"
+repository = "https://github.com/yourusername/shootflow-infra"
+keywords = ["aws", "cdk", "shootflow", "infrastructure-as-code", "iac"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+
+# AWS CDK core dependencies
+aws-cdk-lib = "^2.90.0"
+constructs = "^10.2.0"
+
+# Additional AWS-related Python libraries
+boto3 = "^1.28.0"
+
+# Optional additional libraries
+requests = "^2.31.0"  # For HTTP requests if needed within the stack
+python-dotenv = "^1.0.0"  # For managing environment variables (optional)
+
+[tool.poetry.dev-dependencies]
+pytest = "^7.4.2"        # Testing framework
+pytest-mock = "^3.11.0"  # Mocking for tests
+black = "^23.7.0"        # Code formatter
+flake8 = "^6.1.0"        # Linter for code checks
+pre-commit = "^3.5.0"    # Pre-commit hooks for auto-formatting and checks
+mypy = "^1.5.0"          # Static typing checker (optional)
+
+[build-system]
+requires = ["poetry-core>=1.5.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+shootflow-infra = "shootflow_infra.main:main"# Shortcut for running the AWS CDK CLI
+
+[tool.poetry.extras]
+dev = ["pytest", "black", "flake8", "pre-commit", "mypy"]

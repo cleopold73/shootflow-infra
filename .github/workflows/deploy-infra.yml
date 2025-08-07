@@ -1,0 +1,69 @@
+name: Deploy Infrastructure
+
+on:
+  push:
+    branches:
+      - main  # Trigger on push to the main branch
+  workflow_dispatch:  # Allow manual trigger of the workflow
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    
+    # Step 1: Check out the code
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    # Step 2: Configure AWS credentials via OIDC
+    - name: Configure AWS credentials via OIDC
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        role-to-assume: arn:aws:iam::477763023369:role/ShootflowOIDCRole
+        aws-region: us-east-1
+        oidc: true
+
+    # Step 3: Set up Python 3.10
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'  # Use Python 3.10 for the workflow
+
+    # Step 4: Install pipx
+    - name: Install pipx
+      run: |
+        python3 -m pip install --user pipx
+        python3 -m pipx ensurepath
+
+    # Step 5: Install Poetry using pipx
+    - name: Install Poetry
+      run: |
+        pipx install poetry==1.8.4
+
+    # Step 6: Install dependencies using Poetry
+    - name: Install dependencies
+      run: poetry install
+
+    # Step 7: Bootstrap the AWS environment (if needed for CDK)
+    - name: Bootstrap the AWS environment
+      run: poetry run cdk bootstrap aws://477763023369/us-east-1
+      env:
+        AWS_DEFAULT_REGION: us-east-1
+
+    # Step 8: Synthesize CDK stack (optional for validation)
+    - name: Synthesize CDK stack
+      run: poetry run cdk synth
+      env:
+        AWS_DEFAULT_REGION: us-east-1
+
+    # Step 9: Deploy the CDK stack
+    - name: Deploy Infrastructure
+      run: poetry run cdk deploy --require-approval never
+      env:
+        AWS_DEFAULT_REGION: us-east-1
+
+    - name: test
+      run: poetry run shootflow-infra
+      env:
+        AWS_DEFAULT_REGION: us-east-1
