@@ -21,7 +21,7 @@ class ShootflowInfraStack(Stack):
 
         ecr_publish_role = iam.Role(
             self,
-            "GitHubActionsRole",
+            "ShootflowEcrPublishRole",
             # The trust policy for GitHub OIDC
             assumed_by=iam.FederatedPrincipal(
                 "arn:aws:iam::aws:oidc-provider/token.actions.githubusercontent.com",
