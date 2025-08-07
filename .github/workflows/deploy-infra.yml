@@ -52,7 +52,7 @@ jobs:
     - name: Set up Node.js
       uses: actions/setup-node@v3
       with:
-        node-version: '16'  # Specify compatible Node.js version (or latest stable)
+        node-version: '20'  # Specify compatible Node.js version (or latest stable)
 
     # Step 8: Install the AWS CDK CLI globally using npm
     - name: Install AWS CDK CLI
