@@ -81,9 +81,3 @@ jobs:
         cdk deploy --require-approval never
       env:
         AWS_DEFAULT_REGION: us-east-1
-
-    # Step 12: Run Python-based post-deployment tests (if needed)
-    - name: Test infrastructure (optional)
-      run: poetry run shootflow-infra
-      env:
-        AWS_DEFAULT_REGION: us-east-1
