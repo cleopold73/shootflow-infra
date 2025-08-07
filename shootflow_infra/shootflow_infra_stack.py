@@ -34,7 +34,7 @@ class ShootflowInfraStack(Stack):
                 "../shootflow-services/functions/ingest"
             ),
             environment={
-                "TABLE_NAME": self.metadata_table.table_name,
+                "TABLE_NAME": metadata_table.table_name,
             }
         )
         metadata_table.grant_read_write_data(ingest_fn)
