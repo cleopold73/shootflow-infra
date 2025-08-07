@@ -56,7 +56,7 @@ jobs:
 
     # Step 8: Install the AWS CDK CLI globally using npm
     - name: Install AWS CDK CLI
-      run: npm install -g aws-cdk@2.90.0  # Or replace with latest stable version
+      run: npm install -g aws-cdk@2.1024.0  # Or replace with latest stable version
 
     # Step 10: Synthesize CDK stack (optional for validation)
     - name: Synthesize CDK stack
