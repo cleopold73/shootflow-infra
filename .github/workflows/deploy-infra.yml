@@ -6,6 +6,10 @@ on:
       - main  # Trigger on push to the main branch
   workflow_dispatch:  # Allow manual trigger of the workflow
 
+permissions:
+  id-token: write   # This is required for requesting the JWT
+  contents: read    # This is required for actions/checkout
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
