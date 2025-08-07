@@ -58,12 +58,6 @@ jobs:
     - name: Install AWS CDK CLI
       run: npm install -g aws-cdk@2.90.0  # Or replace with latest stable version
 
-    # Step 9: Bootstrap the AWS environment
-    - name: Bootstrap the AWS environment
-      run: cdk bootstrap aws://477763023369/us-east-1 --toolkit-stack-name ShootflowInfraStack
-      env:
-        AWS_DEFAULT_REGION: us-east-1
-
     # Step 10: Synthesize CDK stack (optional for validation)
     - name: Synthesize CDK stack
       run: cdk synth
