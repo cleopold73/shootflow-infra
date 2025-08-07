@@ -60,13 +60,25 @@ jobs:
 
     # Step 10: Synthesize CDK stack (optional for validation)
     - name: Synthesize CDK stack
-      run: cdk synth
+      run: |
+        # Find Poetry's virtual environment path
+        VENV_PATH=$(poetry env info --path)
+        # Source the Python virtual environment
+        source $VENV_PATH/bin/activate
+        # Run the CDK synth
+        cdk synth
       env:
         AWS_DEFAULT_REGION: us-east-1
 
     # Step 11: Deploy the CDK stack
     - name: Deploy Infrastructure
-      run: cdk deploy --require-approval never
+      run: |
+        # Find Poetry's virtual environment path
+        VENV_PATH=$(poetry env info --path)
+        # Source the Python virtual environment
+        source $VENV_PATH/bin/activate
+        # Run the CDK synth
+        cdk deploy --require-approval never
       env:
         AWS_DEFAULT_REGION: us-east-1
 
