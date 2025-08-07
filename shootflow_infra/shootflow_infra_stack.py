@@ -17,7 +17,7 @@ class ShootflowInfraStack(Stack):
 
         upload_bucket = s3.Bucket(
             self,"ShootflowUploadBucket",  # Logical ID for this resource
-            bucket_name="ShootFlowUpload",  # Name of the bucket
+            bucket_name="shootflowupload",  # Name of the bucket
             removal_policy=RemovalPolicy.DESTROY
             # Optional: Automatically destroy the bucket if the stack is deleted
         )
