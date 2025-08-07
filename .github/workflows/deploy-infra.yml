@@ -22,7 +22,6 @@ jobs:
       with:
         role-to-assume: arn:aws:iam::477763023369:role/ShootflowOIDCRole
         aws-region: us-east-1
-        oidc: true
 
     # Step 3: Set up Python 3.10
     - name: Set up Python
