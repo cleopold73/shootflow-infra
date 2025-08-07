@@ -48,25 +48,36 @@ jobs:
     - name: Install dependencies
       run: poetry install
 
-    # Step 7: Bootstrap the AWS environment (if needed for CDK)
+    # Step 7: Set up Node.js (required for AWS CDK CLI)
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '16'  # Specify compatible Node.js version (or latest stable)
+
+    # Step 8: Install the AWS CDK CLI globally using npm
+    - name: Install AWS CDK CLI
+      run: npm install -g aws-cdk@2.90.0  # Or replace with latest stable version
+
+    # Step 9: Bootstrap the AWS environment
     - name: Bootstrap the AWS environment
-      run: poetry run cdk bootstrap aws://477763023369/us-east-1
+      run: cdk bootstrap aws://477763023369/us-east-1
       env:
         AWS_DEFAULT_REGION: us-east-1
 
-    # Step 8: Synthesize CDK stack (optional for validation)
+    # Step 10: Synthesize CDK stack (optional for validation)
     - name: Synthesize CDK stack
-      run: poetry run cdk synth
+      run: cdk synth
       env:
         AWS_DEFAULT_REGION: us-east-1
 
-    # Step 9: Deploy the CDK stack
+    # Step 11: Deploy the CDK stack
     - name: Deploy Infrastructure
-      run: poetry run cdk deploy --require-approval never
+      run: cdk deploy --require-approval never
       env:
         AWS_DEFAULT_REGION: us-east-1
 
-    - name: test
+    # Step 12: Run Python-based post-deployment tests (if needed)
+    - name: Test infrastructure (optional)
       run: poetry run shootflow-infra
       env:
         AWS_DEFAULT_REGION: us-east-1
