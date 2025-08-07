@@ -24,12 +24,13 @@ class ShootflowInfraStack(Stack):
             "ShootflowEcrPublishRole",
             # The trust policy for GitHub OIDC
             assumed_by=iam.FederatedPrincipal(
-                "arn:aws:iam::aws:oidc-provider/token.actions.githubusercontent.com",
+                "arn:aws:iam::477763023369:oidc-provider/token.actions.githubusercontent.com",
                 {
                     "StringEquals": {
-                        # Replace with your GitHub organization/repository and branch
                         "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-                        "token.actions.githubusercontent.com:sub": "repo:YOUR_GITHUB_ORG/YOUR_REPO_NAME:ref:refs/heads/main"
+                    },
+                    "StringLike": {
+                        "token.actions.githubusercontent.com:sub": "repo:cleopold73/shootflow-infra:*"
                     }
                 },
                 "sts:AssumeRoleWithWebIdentity"
