@@ -42,14 +42,16 @@ class ShootflowInfraStack(Stack):
         ecr_publish_role.add_to_policy(
             iam.PolicyStatement(
                 actions=[
-                    "ecr:BatchCheckLayerAvailability",
-                    "ecr:CompleteLayerUpload",
-                    "ecr:DescribeImages",
-                    "ecr:DescribeRepositories",
-                    "ecr:InitiateLayerUpload",
-                    "ecr:PutImage",
-                    "ecr:UploadLayerPart",
-                    "ecr:GetAuthorizationToken"
+                    'ecr:GetAuthorizationToken',
+                    'ecr:BatchCheckLayerAvailability',
+                    'ecr:GetDownloadUrlForLayer',
+                    'ecr:BatchGetImage',
+                    'ecr:InitiateLayerUpload',
+                    'ecr:UploadLayerPart',
+                    'ecr:CompleteLayerUpload',
+                    'ecr:PutImage',
+                    'ecr:CreateRepository',
+                    'ecr:DescribeRepositories',
                 ],
                 resources=[ecr_repo.repository_arn],
             )
