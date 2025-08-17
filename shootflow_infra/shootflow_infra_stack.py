@@ -181,7 +181,7 @@ class ShootflowInfraStack(Stack):
                     "LAMBDA_ADAPTER": "passthrough",
                 }
             )
-            metadata_table.grant_read_data(flickr_poster_fn)
+            metadata_table.grant_read_write_data(flickr_poster_fn)
             upload_bucket.grant_read(flickr_poster_fn)
 
             # Grant Flickr poster Lambda read access to the "FLICKR-API" secret
