@@ -143,7 +143,7 @@ class ShootflowInfraStack(Stack):
                 timeout=Duration.seconds(30),
                 environment={
                     "SHOOTFLOW_DDB_TABLE": metadata_table.table_name,
-                    "LAMBDA_TARGET": "shootflow:handlers:s3_ingest:handler",
+                    "LAMBDA_TARGET": "shootflow.handlers.s3_ingest:handler",
                     "LAMBDA_ADAPTER": "sqs_s3",
                 }
             )
