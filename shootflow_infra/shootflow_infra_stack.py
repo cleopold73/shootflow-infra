@@ -15,6 +15,7 @@ from constructs import Construct
 
 class ShootflowInfraStack(Stack):
 
+    # noinspection PyTypeChecker
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
@@ -114,7 +115,7 @@ class ShootflowInfraStack(Stack):
                 self, "IngestFunction",
                 code=code,
                 environment={
-                    "TABLE_NAME": metadata_table.table_name,
+                    "SHOOTFLOW_DDB_TABLE": metadata_table.table_name,
                 }
             )
             metadata_table.grant_read_write_data(ingest_fn)
@@ -122,3 +123,4 @@ class ShootflowInfraStack(Stack):
                 s3.EventType.OBJECT_CREATED,
                 s3n.LambdaDestination(ingest_fn)
             )
+            upload_bucket.grant_read(ingest_fn)
