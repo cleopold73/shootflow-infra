@@ -18,6 +18,7 @@ class ShootflowInfraStack(Stack):
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
+        # Local/default repo (used if the incoming image points here)
         ecr_repo = ecr.Repository(self, "ShootflowEcrRepository", repository_name="shootflow-ecr-repo")
 
         ecr_publish_role = iam.Role(
@@ -79,23 +80,33 @@ class ShootflowInfraStack(Stack):
         # Read the image URI from context/env (provided by the workflow)
         image_uri = self.node.try_get_context("imageUri") or os.getenv("IMAGE_URI")
 
-        def extract_tag_or_digest(uri: str) -> Optional[str]:
-            # Accepts .../repo:tag or .../repo@sha256:...
-            if "@sha256:" in uri:
-                m = re.search(r"@sha256:[0-9a-fA-F]{64}$", uri)
-                return m.group(0)[1:] if m else None  # return "sha256:..."
-            # Fallback to tag
-            m = re.search(r":([^:@]+)$", uri)
-            return m.group(1) if m else None
+        def parse_repo_and_ref(uri: str) -> tuple[Optional[str], Optional[str]]:
+            # Formats:
+            # <acct>.dkr.ecr.<region>.amazonaws.com/repo:tag
+            # <acct>.dkr.ecr.<region>.amazonaws.com/repo@sha256:...
+            m = re.match(r"^[^/]+/([^:@]+)(?::([^@]+))?(?:@(sha256:[0-9a-fA-F]{64}))?$", uri or "")
+            if not m:
+                return None, None
+            repo_name = m.group(1)
+            tag = m.group(2)
+            digest = m.group(3)
+            return repo_name, (digest or tag)
 
         if image_uri:
-            tag_or_digest = extract_tag_or_digest(image_uri)
-            if not tag_or_digest:
-                raise ValueError(f"Unable to extract tag or digest from image URI: {image_uri}")
+            repo_name, tag_or_digest = parse_repo_and_ref(image_uri)
+            if not repo_name or not tag_or_digest:
+                raise ValueError(f"Unable to parse repository and tag/digest from image URI: {image_uri}")
 
-            # Use the existing ECR repo and the extracted tag/digest
-            code = _lambda.EcrImageCode.from_ecr_repository(
-                repository=ecr_repo,
+            # Use the created repo if names match; otherwise import the target repo by name
+            if repo_name == ecr_repo.repository_name:
+                target_repo = ecr_repo
+            else:
+                target_repo = ecr.Repository.from_repository_name(
+                    self, "ImportedImageRepo", repository_name=repo_name
+                )
+
+            code = _lambda.DockerImageCode.from_ecr(
+                repository=target_repo,
                 tag_or_digest=tag_or_digest
             )
 
