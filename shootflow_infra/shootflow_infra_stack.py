@@ -9,6 +9,7 @@ from aws_cdk import (
     aws_ecr as ecr,
     aws_iam as iam,
     aws_sqs as sqs,  # ADD
+    aws_secretsmanager as secretsmanager,  # ADD
 )
 from aws_cdk import aws_lambda_event_sources as lambda_event_sources  # ADD
 import os
@@ -151,6 +152,7 @@ class ShootflowInfraStack(Stack):
                 timeout=Duration.seconds(60),
                 environment={
                     "SHOOTFLOW_DDB_TABLE": metadata_table.table_name,
+                    "SHOOTFLOW_S3_BUCKET": upload_bucket.bucket_name,
                     "LAMBDA_TARGET": "shootflow.handlers.s3_ingest:handler",
                     "LAMBDA_ADAPTER": "sqs_s3",
                 }
@@ -166,3 +168,24 @@ class ShootflowInfraStack(Stack):
                     max_batching_window=Duration.seconds(5)  # optional
                 )
             )
+            # Second Lambda: Flickr Poster
+            # noinspection PyTypeChecker
+            flickr_poster_fn: _lambda.IFunction = _lambda.DockerImageFunction(
+                self, "FlickrPosterFunction",
+                code=code,
+                timeout=Duration.seconds(60),
+                environment={
+                    "SHOOTFLOW_DDB_TABLE": metadata_table.table_name,
+                    "SHOOTFLOW_S3_BUCKET": upload_bucket.bucket_name,
+                    "LAMBDA_TARGET": "shootflow.handlers.flickr_poster:handler",
+                    "LAMBDA_ADAPTER": "passthrough",
+                }
+            )
+            metadata_table.grant_read_data(flickr_poster_fn)
+            upload_bucket.grant_read(flickr_poster_fn)
+
+            # Grant Flickr poster Lambda read access to the "FLICKR-API" secret
+            flickr_secret = secretsmanager.Secret.from_secret_name_v2(
+                self, "FlickrApiSecret", "FLICKR-API"
+            )
+            flickr_secret.grant_read(flickr_poster_fn)
