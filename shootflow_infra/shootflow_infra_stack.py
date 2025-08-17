@@ -173,7 +173,7 @@ class ShootflowInfraStack(Stack):
             flickr_poster_fn: _lambda.IFunction = _lambda.DockerImageFunction(
                 self, "FlickrPosterFunction",
                 code=code,
-                timeout=Duration.seconds(60),
+                timeout=Duration.seconds(600),
                 environment={
                     "SHOOTFLOW_DDB_TABLE": metadata_table.table_name,
                     "SHOOTFLOW_S3_BUCKET": upload_bucket.bucket_name,
