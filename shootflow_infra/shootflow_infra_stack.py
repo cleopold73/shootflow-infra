@@ -9,6 +9,8 @@ from aws_cdk import (
     aws_iam as iam
 )
 import os
+import re
+from typing import Optional
 from constructs import Construct
 
 class ShootflowInfraStack(Stack):
@@ -76,14 +78,36 @@ class ShootflowInfraStack(Stack):
 
         # Read the image URI from context/env (provided by the workflow)
         image_uri = self.node.try_get_context("imageUri") or os.getenv("IMAGE_URI")
+
+        def extract_tag_or_digest(uri: str) -> Optional[str]:
+            # Accepts .../repo:tag or .../repo@sha256:...
+            if "@sha256:" in uri:
+                m = re.search(r"@sha256:[0-9a-fA-F]{64}$", uri)
+                return m.group(0)[1:] if m else None  # return "sha256:..."
+            # Fallback to tag
+            m = re.search(r":([^:@]+)$", uri)
+            return m.group(1) if m else None
+
         if image_uri:
-            ingest_fn = _lambda.DockerImageFunction(
+            tag_or_digest = extract_tag_or_digest(image_uri)
+            if not tag_or_digest:
+                raise ValueError(f"Unable to extract tag or digest from image URI: {image_uri}")
+
+            # Use the existing ECR repo and the extracted tag/digest
+            code = _lambda.EcrImageCode.from_ecr_repository(
+                repository=ecr_repo,
+                tag_or_digest=tag_or_digest
+            )
+
+            ingest_fn: _lambda.IFunction = _lambda.DockerImageFunction(
                 self, "IngestFunction",
-                code=_lambda.DockerImageCode.from_image_uri(image_uri=image_uri),
+                code=code,
                 environment={
                     "TABLE_NAME": metadata_table.table_name,
                 }
             )
             metadata_table.grant_read_write_data(ingest_fn)
-            # Hook up events if/when needed:
-            upload_bucket.add_event_notification(s3.EventType.OBJECT_CREATED, s3n.LambdaDestination(ingest_fn))
+            upload_bucket.add_event_notification(
+                s3.EventType.OBJECT_CREATED,
+                s3n.LambdaDestination(ingest_fn)
+            )
