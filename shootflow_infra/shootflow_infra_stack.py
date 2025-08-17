@@ -7,8 +7,10 @@ from aws_cdk import (
     aws_lambda as _lambda,
     aws_s3_notifications as s3n,
     aws_ecr as ecr,
-    aws_iam as iam
+    aws_iam as iam,
+    aws_sqs as sqs,  # ADD
 )
+from aws_cdk import aws_lambda_event_sources as lambda_event_sources  # ADD
 import os
 import re
 from typing import Optional
@@ -71,6 +73,29 @@ class ShootflowInfraStack(Stack):
             removal_policy=RemovalPolicy.DESTROY
         )
 
+        # ADD: DLQ for failed SQS messages
+        dlq = sqs.Queue(
+            self, "IngestDlq",
+            retention_period=Duration.days(14)
+        )
+
+        # ADD: Main SQS queue receiving S3 notifications
+        ingest_queue = sqs.Queue(
+            self, "IngestQueue",
+            # Must be greater than the Lambda timeout (set below to 30s)
+            visibility_timeout=Duration.seconds(90),
+            dead_letter_queue=sqs.DeadLetterQueue(
+                queue=dlq,
+                max_receive_count=5
+            )
+        )
+
+        upload_bucket.add_event_notification(
+            s3.EventType.OBJECT_CREATED,
+            s3n.SqsDestination(ingest_queue)
+            # , s3.NotificationKeyFilter(prefix="uploads/", suffix=".jpg")  # optional filters
+        )
+
         metadata_table = dynamodb.Table(
             self, "ShootFlowPhotoMetadata",
             partition_key=dynamodb.Attribute(name="photoId", type=dynamodb.AttributeType.STRING),
@@ -121,8 +146,13 @@ class ShootflowInfraStack(Stack):
                 }
             )
             metadata_table.grant_read_write_data(ingest_fn)
-            upload_bucket.add_event_notification(
-                s3.EventType.OBJECT_CREATED,
-                s3n.LambdaDestination(ingest_fn)
-            )
             upload_bucket.grant_read(ingest_fn)
+
+            # CHANGE: Connect SQS -> Lambda (replace direct S3 -> Lambda)
+            ingest_fn.add_event_source(
+                lambda_event_sources.SqsEventSource(
+                    ingest_queue,
+                    batch_size=10,                         # tune as needed
+                    max_batching_window=Duration.seconds(5)  # optional
+                )
+            )
