@@ -82,8 +82,8 @@ class ShootflowInfraStack(Stack):
         # ADD: Main SQS queue receiving S3 notifications
         ingest_queue = sqs.Queue(
             self, "IngestQueue",
-            # Must be greater than the Lambda timeout (set below to 30s)
-            visibility_timeout=Duration.seconds(90),
+            # Must be greater than the Lambda timeout (set below to 60s)
+            visibility_timeout=Duration.seconds(120),
             dead_letter_queue=sqs.DeadLetterQueue(
                 queue=dlq,
                 max_receive_count=5
@@ -140,7 +140,7 @@ class ShootflowInfraStack(Stack):
             ingest_fn: _lambda.IFunction = _lambda.DockerImageFunction(
                 self, "IngestFunction",
                 code=code,
-                timeout=Duration.seconds(30),
+                timeout=Duration.seconds(60),
                 environment={
                     "SHOOTFLOW_DDB_TABLE": metadata_table.table_name,
                     "LAMBDA_TARGET": "shootflow.handlers.s3_ingest:handler",
