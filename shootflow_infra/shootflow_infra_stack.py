@@ -174,6 +174,7 @@ class ShootflowInfraStack(Stack):
                 self, "FlickrPosterFunction",
                 code=code,
                 timeout=Duration.seconds(600),
+                memory_size=512,
                 environment={
                     "SHOOTFLOW_DDB_TABLE": metadata_table.table_name,
                     "SHOOTFLOW_S3_BUCKET": upload_bucket.bucket_name,
