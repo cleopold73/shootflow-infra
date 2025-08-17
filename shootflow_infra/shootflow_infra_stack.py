@@ -1,6 +1,7 @@
 from aws_cdk import (
     Stack,
     RemovalPolicy,
+    Duration,
     aws_s3 as s3,
     aws_dynamodb as dynamodb,
     aws_lambda as _lambda,
@@ -114,6 +115,7 @@ class ShootflowInfraStack(Stack):
             ingest_fn: _lambda.IFunction = _lambda.DockerImageFunction(
                 self, "IngestFunction",
                 code=code,
+                timeout=Duration.seconds(30),
                 environment={
                     "SHOOTFLOW_DDB_TABLE": metadata_table.table_name,
                 }
