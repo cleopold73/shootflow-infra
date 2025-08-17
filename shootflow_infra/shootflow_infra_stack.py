@@ -103,6 +103,14 @@ class ShootflowInfraStack(Stack):
             removal_policy=RemovalPolicy.DESTROY,
         )
 
+        # ADD: GSI with partition key 'status' and sort key 'photoId'
+        metadata_table.add_global_secondary_index(
+            index_name="status-photoId-gsi",
+            partition_key=dynamodb.Attribute(name="status", type=dynamodb.AttributeType.STRING),
+            sort_key=dynamodb.Attribute(name="photoId", type=dynamodb.AttributeType.STRING),
+            projection_type=dynamodb.ProjectionType.ALL,
+        )
+
         # Read the image URI from context/env (provided by the workflow)
         image_uri = self.node.try_get_context("imageUri") or os.getenv("IMAGE_URI")
 
