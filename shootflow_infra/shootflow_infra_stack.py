@@ -12,21 +12,21 @@ import os
 import re
 from typing import Optional
 from constructs import Construct
+from aws_cdk import Stack as CdkStack
 
 class ShootflowInfraStack(Stack):
-
-    # noinspection PyTypeChecker
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
-        # Local/default repo (used if the incoming image points here)
+        account_id = CdkStack.of(self).account
+
         ecr_repo = ecr.Repository(self, "ShootflowEcrRepository", repository_name="shootflow-ecr-repo")
 
         ecr_publish_role = iam.Role(
             self,
             "ShootflowEcrPublishRole",
             assumed_by=iam.FederatedPrincipal(
-                "arn:aws:iam::477763023369:oidc-provider/token.actions.githubusercontent.com",
+                f"arn:aws:iam::{account_id}:oidc-provider/token.actions.githubusercontent.com",
                 {
                     "StringEquals": {
                         "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
@@ -39,7 +39,6 @@ class ShootflowInfraStack(Stack):
             ),
             description="Role for GitHub Actions to publish Docker images to ECR"
         )
-
         ecr_publish_role.add_to_policy(
             iam.PolicyStatement(
                 actions=[
@@ -111,6 +110,7 @@ class ShootflowInfraStack(Stack):
                 tag_or_digest=tag_or_digest
             )
 
+            # noinspection PyTypeChecker
             ingest_fn: _lambda.IFunction = _lambda.DockerImageFunction(
                 self, "IngestFunction",
                 code=code,
