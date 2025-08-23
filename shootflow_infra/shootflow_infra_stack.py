@@ -12,6 +12,8 @@ from aws_cdk import (
     aws_secretsmanager as secretsmanager,  # ADD
 )
 from aws_cdk import aws_lambda_event_sources as lambda_event_sources  # ADD
+from aws_cdk import aws_events as events  # ADD
+from aws_cdk import aws_events_targets as events_targets  # ADD
 import os
 import re
 from typing import Optional
@@ -196,3 +198,10 @@ class ShootflowInfraStack(Stack):
                 self, "OpenAiApiSecret", "OPENAI-API"
             )
             openai_secret.grant_read(flickr_poster_fn)
+
+            # Trigger Flickr Poster daily around 8am US Central (14:00 UTC)
+            events.Rule(
+                self, "FlickrPosterScheduleRule",
+                schedule=events.Schedule.cron(minute="0", hour="14"),
+                targets=[events_targets.LambdaFunction(flickr_poster_fn)]
+            )
