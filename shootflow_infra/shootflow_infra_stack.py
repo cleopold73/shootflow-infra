@@ -190,3 +190,9 @@ class ShootflowInfraStack(Stack):
                 self, "FlickrApiSecret", "FLICKR-API"
             )
             flickr_secret.grant_read(flickr_poster_fn)
+
+            # Grant Flickr poster Lambda read access to the "OPENAI-API" secret
+            openai_secret = secretsmanager.Secret.from_secret_name_v2(
+                self, "OpenAiApiSecret", "OPENAI-API"
+            )
+            openai_secret.grant_read(flickr_poster_fn)
