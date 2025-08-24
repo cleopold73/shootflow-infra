@@ -89,6 +89,7 @@ jobs:
         VENV_PATH=$(poetry env info --path)
         source "$VENV_PATH/bin/activate"
         cdk deploy --require-approval never ShootflowEcrStack
+      env:
         AWS_DEFAULT_REGION: us-east-1
 
   deploy_dev:

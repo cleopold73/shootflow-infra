@@ -56,4 +56,3 @@ class ShootflowEcrStack(Stack):
                 resources=["*"],
             )
         )
-
