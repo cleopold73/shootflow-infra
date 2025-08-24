@@ -149,8 +149,37 @@ jobs:
       env:
         AWS_DEFAULT_REGION: us-east-1
 
+  validate_dev_success:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Ensure latest development deployment succeeded
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          WF_ID=$(gh api repos/${{ github.repository }}/actions/workflows --jq '.workflows[] | select(.path|endswith("/deploy-infra.yml")) | .id' | head -n1)
+          if [ -z "${WF_ID}" ]; then
+            echo "Workflow file deploy-infra.yml not found."
+            exit 1
+          fi
+          CONCLUSION=$(gh api repos/${{ github.repository }}/actions/workflows/${WF_ID}/runs -f event=push -f branch=main -f status=completed --jq '.workflow_runs[0].conclusion // empty')
+          if [ -z "${CONCLUSION}" ]; then
+            echo "No completed development workflow runs found on main."
+            exit 1
+          fi
+          echo "Latest development workflow conclusion: ${CONCLUSION}"
+          if [ "${CONCLUSION}" != "success" ]; then
+            echo "Latest development deployment did not succeed. Conclusion: ${CONCLUSION}"
+            exit 1
+          fi
+
   deploy_production:
     if: github.event_name == 'workflow_dispatch'
+    needs: validate_dev_success
     runs-on: ubuntu-latest
 
     steps:
