@@ -116,6 +116,16 @@ class ShootflowInfraStack(Stack):
 
         # Read the image URI from context/env (provided by the workflow)
         image_uri = self.node.try_get_context("imageUri") or os.getenv("IMAGE_URI")
+        if not image_uri:
+            # Read from repo file if present
+            repo_dir = os.path.dirname(os.path.abspath(__file__))
+            uri_file = os.path.join(repo_dir, "image_uri.txt")
+            try:
+                with open(uri_file, "r", encoding="utf-8") as f:
+                    contents = f.read().strip()
+                    image_uri = contents if contents else None
+            except FileNotFoundError:
+                image_uri = None
 
         def parse_repo_and_ref(uri: str) -> tuple[Optional[str], Optional[str]]:
             # Formats:
@@ -129,6 +139,9 @@ class ShootflowInfraStack(Stack):
             digest = m.group(3)
             return repo_name, (digest or tag)
 
+        # Determine target repo and tag/digest. Always create Lambdas; choose image source conditionally.
+        target_repo = None
+        tag_or_digest: Optional[str] = None
         if image_uri:
             repo_name, tag_or_digest = parse_repo_and_ref(image_uri)
             if not repo_name or not tag_or_digest:
@@ -141,67 +154,74 @@ class ShootflowInfraStack(Stack):
                 target_repo = ecr.Repository.from_repository_name(
                     self, "ImportedImageRepo", repository_name=repo_name
                 )
+        else:
+            # No image specified: keep Lambdas using a stable default tag on our repo.
+            # You can override via context: -c defaultImageTag=prod or env DEFAULT_IMAGE_TAG
+            target_repo = ecr_repo
+            tag_or_digest = self.node.try_get_context("defaultImageTag") or os.getenv("DEFAULT_IMAGE_TAG") or "latest"
 
-            code = _lambda.DockerImageCode.from_ecr(
-                repository=target_repo,
-                tag_or_digest=tag_or_digest
-            )
+        code = _lambda.DockerImageCode.from_ecr(
+            repository=target_repo,
+            tag_or_digest=tag_or_digest
+        )
 
-            # noinspection PyTypeChecker
-            ingest_fn: _lambda.IFunction = _lambda.DockerImageFunction(
-                self, "IngestFunction",
-                code=code,
-                timeout=Duration.seconds(60),
-                environment={
-                    "SHOOTFLOW_DDB_TABLE": metadata_table.table_name,
-                    "SHOOTFLOW_S3_BUCKET": upload_bucket.bucket_name,
-                    "LAMBDA_TARGET": "shootflow.handlers.s3_ingest:handler",
-                    "LAMBDA_ADAPTER": "sqs_s3",
-                }
-            )
-            metadata_table.grant_read_write_data(ingest_fn)
-            upload_bucket.grant_read(ingest_fn)
+        # noinspection PyTypeChecker
+        ingest_fn: _lambda.IFunction = _lambda.DockerImageFunction(
+            self, "IngestFunction",
+            code=code,
+            timeout=Duration.seconds(60),
+            function_name=f"{CdkStack.of(self).stack_name}-Ingest",
+            environment={
+                "SHOOTFLOW_DDB_TABLE": metadata_table.table_name,
+                "SHOOTFLOW_S3_BUCKET": upload_bucket.bucket_name,
+                "LAMBDA_TARGET": "shootflow.handlers.s3_ingest:handler",
+                "LAMBDA_ADAPTER": "sqs_s3",
+            }
+        )
+        metadata_table.grant_read_write_data(ingest_fn)
+        upload_bucket.grant_read(ingest_fn)
 
-            # CHANGE: Connect SQS -> Lambda (replace direct S3 -> Lambda)
-            ingest_fn.add_event_source(
-                lambda_event_sources.SqsEventSource(
-                    ingest_queue,
-                    batch_size=10,                         # tune as needed
-                    max_batching_window=Duration.seconds(5)  # optional
-                )
+        # CHANGE: Connect SQS -> Lambda (replace direct S3 -> Lambda)
+        ingest_fn.add_event_source(
+            lambda_event_sources.SqsEventSource(
+                ingest_queue,
+                batch_size=10,                         # tune as needed
+                max_batching_window=Duration.seconds(5)  # optional
             )
-            # Second Lambda: Flickr Poster
-            # noinspection PyTypeChecker
-            flickr_poster_fn: _lambda.IFunction = _lambda.DockerImageFunction(
-                self, "FlickrPosterFunction",
-                code=code,
-                timeout=Duration.seconds(600),
-                memory_size=512,
-                environment={
-                    "SHOOTFLOW_DDB_TABLE": metadata_table.table_name,
-                    "SHOOTFLOW_S3_BUCKET": upload_bucket.bucket_name,
-                    "LAMBDA_TARGET": "shootflow.handlers.flickr_poster:handler",
-                    "LAMBDA_ADAPTER": "passthrough",
-                }
-            )
-            metadata_table.grant_read_write_data(flickr_poster_fn)
-            upload_bucket.grant_read(flickr_poster_fn)
+        )
+        # Second Lambda: Flickr Poster
+        # noinspection PyTypeChecker
+        flickr_poster_fn: _lambda.IFunction = _lambda.DockerImageFunction(
+            self, "FlickrPosterFunction",
+            code=code,
+            timeout=Duration.seconds(600),
+            memory_size=512,
+            function_name=f"{CdkStack.of(self).stack_name}-FlickrPoster",
+            environment={
+                "SHOOTFLOW_DDB_TABLE": metadata_table.table_name,
+                "SHOOTFLOW_S3_BUCKET": upload_bucket.bucket_name,
+                "LAMBDA_TARGET": "shootflow.handlers.flickr_poster:handler",
+                "LAMBDA_ADAPTER": "passthrough",
+            }
+        )
+        metadata_table.grant_read_write_data(flickr_poster_fn)
+        upload_bucket.grant_read(flickr_poster_fn)
 
-            # Grant Flickr poster Lambda read access to the "FLICKR-API" secret
-            flickr_secret = secretsmanager.Secret.from_secret_name_v2(
-                self, "FlickrApiSecret", "FLICKR-API"
-            )
-            flickr_secret.grant_read(flickr_poster_fn)
+        # Grant Flickr poster Lambda read access to the "FLICKR-API" secret
+        flickr_secret = secretsmanager.Secret.from_secret_name_v2(
+            self, "FlickrApiSecret", "FLICKR-API"
+        )
+        flickr_secret.grant_read(flickr_poster_fn)
 
-            # Grant Flickr poster Lambda read access to the "OPENAI-API" secret
-            openai_secret = secretsmanager.Secret.from_secret_name_v2(
-                self, "OpenAiApiSecret", "OPENAI-API"
-            )
-            openai_secret.grant_read(flickr_poster_fn)
+        # Grant Flickr poster Lambda read access to the "OPENAI-API" secret
+        openai_secret = secretsmanager.Secret.from_secret_name_v2(
+            self, "OpenAiApiSecret", "OPENAI-API"
+        )
+        openai_secret.grant_read(flickr_poster_fn)
 
-            # Trigger Flickr Poster daily around 8am US Central (14:00 UTC)
-            events.Rule(
-                self, "FlickrPosterScheduleRule",
-                schedule=events.Schedule.cron(minute="0", hour="14"),
-                targets=[events_targets.LambdaFunction(flickr_poster_fn)]
-            )
+        # Trigger Flickr Poster daily around 8am US Central (14:00 UTC)
+        events.Rule(
+            self, "FlickrPosterScheduleRule",
+            schedule=events.Schedule.cron(minute="0", hour="14"),
+            targets=[events_targets.LambdaFunction(flickr_poster_fn)]
+        )
