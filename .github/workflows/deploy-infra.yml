@@ -157,23 +157,45 @@ jobs:
       contents: read
     steps:
       - name: Ensure latest development deployment succeeded
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          WF_ID=$(gh api repos/${{ github.repository }}/actions/workflows --jq '.workflows[] | select(.path|endswith("/deploy-infra.yml")) | .id' | head -n1)
-          if [ -z "${WF_ID}" ]; then
-            echo "Workflow file deploy-infra.yml not found."
+          API="https://api.github.com"
+          REPO="${{ github.repository }}"
+          AUTH="Authorization: Bearer ${{ github.token }}"
+          ACCEPT="Accept: application/vnd.github+json"
+
+          # Fetch latest completed push run on main for this workflow file
+          RUNS_JSON=$(curl -sSf -H "$AUTH" -H "$ACCEPT" \
+            "$API/repos/${REPO}/actions/workflows/deploy-infra.yml/runs?event=push&branch=main&status=completed&per_page=1")
+
+          RUN_ID=$(echo "$RUNS_JSON" | jq -r '.workflow_runs[0].id // empty')
+          WF_CONCLUSION=$(echo "$RUNS_JSON" | jq -r '.workflow_runs[0].conclusion // empty')
+
+          if [ -z "$RUN_ID" ]; then
+            echo "No completed push workflow runs found on main."
             exit 1
           fi
-          CONCLUSION=$(gh api repos/${{ github.repository }}/actions/workflows/${WF_ID}/runs -f event=push -f branch=main -f status=completed --jq '.workflow_runs[0].conclusion // empty')
-          if [ -z "${CONCLUSION}" ]; then
-            echo "No completed development workflow runs found on main."
+
+          echo "Latest push workflow conclusion: ${WF_CONCLUSION}"
+          if [ "$WF_CONCLUSION" != "success" ]; then
+            echo "Latest push workflow did not succeed."
             exit 1
           fi
-          echo "Latest development workflow conclusion: ${CONCLUSION}"
-          if [ "${CONCLUSION}" != "success" ]; then
-            echo "Latest development deployment did not succeed. Conclusion: ${CONCLUSION}"
+
+          # Verify the specific development job succeeded in that run
+          JOBS_JSON=$(curl -sSf -H "$AUTH" -H "$ACCEPT" \
+            "$API/repos/${REPO}/actions/runs/${RUN_ID}/jobs?per_page=100")
+
+          DEV_JOB_CONCLUSION=$(echo "$JOBS_JSON" | jq -r '.jobs[] | select(.name=="Deploy Infrastructure (development)") | .conclusion // empty' | head -n1)
+
+          if [ -z "$DEV_JOB_CONCLUSION" ]; then
+            echo "Development job not found in the latest push run."
+            exit 1
+          fi
+
+          echo "Development job conclusion: ${DEV_JOB_CONCLUSION}"
+          if [ "$DEV_JOB_CONCLUSION" != "success" ]; then
+            echo "Development deployment did not succeed."
             exit 1
           fi
 
