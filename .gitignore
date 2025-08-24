@@ -1,3 +1,4 @@
 # Ignore local state and build artifacts
 node_modules/
 .terraform/
+cdk.out
