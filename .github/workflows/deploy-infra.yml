@@ -80,7 +80,7 @@ jobs:
       run: |
         VENV_PATH=$(poetry env info --path)
         source "$VENV_PATH/bin/activate"
-        cdk synth ShootflowEcrStack
+        cdk synth ShootflowEcrStack-production
       env:
         AWS_DEFAULT_REGION: us-east-1
 
@@ -88,7 +88,7 @@ jobs:
       run: |
         VENV_PATH=$(poetry env info --path)
         source "$VENV_PATH/bin/activate"
-        cdk deploy --require-approval never ShootflowEcrStack
+        cdk deploy --require-approval never ShootflowEcrStack-production
       env:
         AWS_DEFAULT_REGION: us-east-1
 
@@ -136,7 +136,7 @@ jobs:
         VENV_PATH=$(poetry env info --path)
         source "$VENV_PATH/bin/activate"
         if [ -n "${IMAGE_URI}" ]; then IMAGE_ARG="-c imageUri=${IMAGE_URI}"; else IMAGE_ARG=""; fi
-        cdk synth -c env=development $IMAGE_ARG
+        cdk synth ShootflowInfraStack-development -c env=development $IMAGE_ARG
       env:
         AWS_DEFAULT_REGION: us-east-1
 
@@ -145,7 +145,7 @@ jobs:
         VENV_PATH=$(poetry env info --path)
         source "$VENV_PATH/bin/activate"
         if [ -n "${IMAGE_URI}" ]; then IMAGE_ARG="-c imageUri=${IMAGE_URI}"; else IMAGE_ARG=""; fi
-        cdk deploy --require-approval never -c env=development $IMAGE_ARG
+        cdk deploy --require-approval never ShootflowInfraStack-development -c env=development $IMAGE_ARG
       env:
         AWS_DEFAULT_REGION: us-east-1
 
@@ -206,7 +206,7 @@ jobs:
         VENV_PATH=$(poetry env info --path)
         source "$VENV_PATH/bin/activate"
         if [ -n "${IMAGE_URI}" ]; then IMAGE_ARG="-c imageUri=${IMAGE_URI}"; else IMAGE_ARG=""; fi
-        cdk synth -c env=production $IMAGE_ARG
+        cdk synth ShootflowInfraStack-production -c env=production $IMAGE_ARG
       env:
         AWS_DEFAULT_REGION: us-east-1
 
@@ -215,6 +215,6 @@ jobs:
         VENV_PATH=$(poetry env info --path)
         source "$VENV_PATH/bin/activate"
         if [ -n "${IMAGE_URI}" ]; then IMAGE_ARG="-c imageUri=${IMAGE_URI}"; else IMAGE_ARG=""; fi
-        cdk deploy --require-approval never -c env=production $IMAGE_ARG
+        cdk deploy --require-approval never ShootflowInfraStack-production -c env=production $IMAGE_ARG
       env:
         AWS_DEFAULT_REGION: us-east-1

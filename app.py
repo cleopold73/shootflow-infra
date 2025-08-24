@@ -13,8 +13,8 @@ app = cdk.App()
 deploy_env = app.node.try_get_context("env") or os.getenv("DEPLOY_ENV") or "production"
 stack_id = f"ShootflowInfraStack-{deploy_env}"
 
-# Shared ECR stack (deployed independently)
-ShootflowEcrStack(app, "ShootflowEcrStack", stack_name="ShootflowEcrStack")
+# Shared ECR stack (deployed independently) — treat as production-owned
+ShootflowEcrStack(app, "ShootflowEcrStack-production", stack_name="ShootflowEcrStack-production")
 
 # Environment-specific application stack
 ShootflowInfraStack(
