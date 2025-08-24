@@ -158,7 +158,7 @@ class ShootflowInfraStack(Stack):
             # No image specified: keep Lambdas using a stable default tag on our repo.
             # You can override via context: -c defaultImageTag=prod or env DEFAULT_IMAGE_TAG
             target_repo = ecr_repo
-            tag_or_digest = self.node.try_get_context("defaultImageTag") or os.getenv("DEFAULT_IMAGE_TAG") or "latest"
+            tag_or_digest = self.node.try_get_context("defaultImageTag") or os.getenv("DEFAULT_IMAGE_TAG") or "shootflow-services-latest"
 
         code = _lambda.DockerImageCode.from_ecr(
             repository=target_repo,
