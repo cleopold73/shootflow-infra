@@ -5,15 +5,24 @@ on:
     branches:
       - main
   workflow_dispatch:
-  repository_dispatch:
-    types: [deploy-lambda]
+    inputs:
+      image_uri:
+        description: 'Optional ECR image URI override for production'
+        required: false
+        type: string
+      confirmation:
+        description: 'Type "I understand" to confirm production deployment'
+        required: true
+        default: 'I understand'
+        type: string
 
 permissions:
   id-token: write
   contents: read
 
 jobs:
-  deploy:
+  deploy_dev:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
 
     steps:
@@ -51,27 +60,90 @@ jobs:
     - name: Install AWS CDK CLI
       run: npm install -g aws-cdk@2.1024.0
 
-    # Pick payload from repository_dispatch if present
-    - name: Extract deployment payload (if repository_dispatch)
-      if: ${{ github.event_name == 'repository_dispatch' }}
-      run: |
-        echo "IMAGE_URI=${{ github.event.client_payload.image_uri }}" >> $GITHUB_ENV
-        echo "SERVICE=${{ github.event.client_payload.service }}" >> $GITHUB_ENV
-        echo "COMMIT_SHA=${{ github.event.client_payload.commit }}" >> $GITHUB_ENV
-        echo "ENVIRONMENT=${{ github.event.client_payload.environment }}" >> $GITHUB_ENV
-
-    - name: Synthesize CDK stack
+    - name: Synthesize CDK stack (development)
       run: |
         VENV_PATH=$(poetry env info --path)
-        source $VENV_PATH/bin/activate
-        cdk synth -c imageUri="${IMAGE_URI}" -c environment="${ENVIRONMENT}"
+        source "$VENV_PATH/bin/activate"
+        if [ -n "${IMAGE_URI}" ]; then IMAGE_ARG="-c imageUri=${IMAGE_URI}"; else IMAGE_ARG=""; fi
+        cdk synth -c env=development $IMAGE_ARG
       env:
         AWS_DEFAULT_REGION: us-east-1
 
-    - name: Deploy Infrastructure
+    - name: Deploy Infrastructure (development)
       run: |
         VENV_PATH=$(poetry env info --path)
-        source $VENV_PATH/bin/activate
-        cdk deploy --require-approval never -c imageUri="${IMAGE_URI}" -c environment="${ENVIRONMENT}"
+        source "$VENV_PATH/bin/activate"
+        if [ -n "${IMAGE_URI}" ]; then IMAGE_ARG="-c imageUri=${IMAGE_URI}"; else IMAGE_ARG=""; fi
+        cdk deploy --require-approval never -c env=development $IMAGE_ARG
+      env:
+        AWS_DEFAULT_REGION: us-east-1
+
+  deploy_production:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Configure AWS credentials via OIDC
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        role-to-assume: arn:aws:iam::477763023369:role/ShootflowOIDCRole
+        aws-region: us-east-1
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install pipx
+      run: |
+        python3 -m pip install --user pipx
+        python3 -m pipx ensurepath
+
+    - name: Install Poetry
+      run: |
+        pipx install poetry==1.8.4
+
+    - name: Install dependencies
+      run: poetry install
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '20'
+
+    - name: Install AWS CDK CLI
+      run: npm install -g aws-cdk@2.1024.0
+
+    - name: Validate confirmation input
+      run: |
+        if [ "${{ github.event.inputs.confirmation }}" != "I understand" ]; then
+          echo "Confirmation phrase mismatch. Aborting."
+          exit 1
+        fi
+
+    - name: Set IMAGE_URI from input (optional)
+      run: |
+        if [ -n "${{ github.event.inputs.image_uri }}" ]; then
+          echo "IMAGE_URI=${{ github.event.inputs.image_uri }}" >> $GITHUB_ENV
+        fi
+
+    - name: Synthesize CDK stack (production)
+      run: |
+        VENV_PATH=$(poetry env info --path)
+        source "$VENV_PATH/bin/activate"
+        if [ -n "${IMAGE_URI}" ]; then IMAGE_ARG="-c imageUri=${IMAGE_URI}"; else IMAGE_ARG=""; fi
+        cdk synth -c env=production $IMAGE_ARG
+      env:
+        AWS_DEFAULT_REGION: us-east-1
+
+    - name: Deploy Infrastructure (production)
+      run: |
+        VENV_PATH=$(poetry env info --path)
+        source "$VENV_PATH/bin/activate"
+        if [ -n "${IMAGE_URI}" ]; then IMAGE_ARG="-c imageUri=${IMAGE_URI}"; else IMAGE_ARG=""; fi
+        cdk deploy --require-approval never -c env=production $IMAGE_ARG
       env:
         AWS_DEFAULT_REGION: us-east-1

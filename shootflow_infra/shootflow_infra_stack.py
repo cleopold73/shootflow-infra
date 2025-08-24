@@ -2,6 +2,7 @@ from aws_cdk import (
     Stack,
     RemovalPolicy,
     Duration,
+    Tags,
     aws_s3 as s3,
     aws_dynamodb as dynamodb,
     aws_lambda as _lambda,
@@ -26,7 +27,17 @@ class ShootflowInfraStack(Stack):
 
         account_id = CdkStack.of(self).account
 
+        # Deployment environment selector: "production" (default) or e.g. "development"
+        deploy_env = self.node.try_get_context("env") or os.getenv("DEPLOY_ENV") or "production"
+
+        # Tag all resources in this stack with the environment for easy UI identification
+        Tags.of(self).add("Environment", deploy_env)
+
+        # Keep a single ECR repo across environments
         ecr_repo = ecr.Repository(self, "ShootflowEcrRepository", repository_name="shootflow-ecr-repo")
+
+        # Parameterize Lambda function name prefix per environment (overridable)
+        fn_name_prefix = self.node.try_get_context("functionNamePrefix") or os.getenv("FUNCTION_NAME_PREFIX") or f"{CdkStack.of(self).stack_name}-{deploy_env}"
 
         ecr_publish_role = iam.Role(
             self,
@@ -70,19 +81,23 @@ class ShootflowInfraStack(Stack):
             )
         )
 
+        bucket_name = "shootflowupload" if deploy_env == "production" else f"shootflowupload-{deploy_env}"
         upload_bucket = s3.Bucket(
             self, "ShootflowUploadBucket",
-            bucket_name="shootflowupload",
+            bucket_name=bucket_name,
             removal_policy=RemovalPolicy.DESTROY
         )
 
         # ADD: DLQ for failed SQS messages
+        dlq_name = None if deploy_env == "production" else f"shootflow-ingest-dlq-{deploy_env}"
         dlq = sqs.Queue(
             self, "IngestDlq",
-            retention_period=Duration.days(14)
+            retention_period=Duration.days(14),
+            queue_name=dlq_name
         )
 
         # ADD: Main SQS queue receiving S3 notifications
+        ingest_queue_name = None if deploy_env == "production" else f"shootflow-ingest-{deploy_env}"
         ingest_queue = sqs.Queue(
             self, "IngestQueue",
             # Must be greater than the Lambda timeout (set below to 60s)
@@ -90,7 +105,8 @@ class ShootflowInfraStack(Stack):
             dead_letter_queue=sqs.DeadLetterQueue(
                 queue=dlq,
                 max_receive_count=5
-            )
+            ),
+            queue_name=ingest_queue_name
         )
 
         upload_bucket.add_event_notification(
@@ -99,11 +115,13 @@ class ShootflowInfraStack(Stack):
             # , s3.NotificationKeyFilter(prefix="uploads/", suffix=".jpg")  # optional filters
         )
 
+        table_name = None if deploy_env == "production" else f"shootflow-photo-metadata-{deploy_env}"
         metadata_table = dynamodb.Table(
             self, "ShootFlowPhotoMetadata",
             partition_key=dynamodb.Attribute(name="photoId", type=dynamodb.AttributeType.STRING),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
             removal_policy=RemovalPolicy.DESTROY,
+            table_name=table_name,
         )
 
         # ADD: GSI with partition key 'status' and sort key 'photoId'
@@ -117,15 +135,19 @@ class ShootflowInfraStack(Stack):
         # Read the image URI from context/env (provided by the workflow)
         image_uri = self.node.try_get_context("imageUri") or os.getenv("IMAGE_URI")
         if not image_uri:
-            # Read from repo file if present
+            # Read from repo file if present (env-specific first)
             repo_dir = os.path.dirname(os.path.abspath(__file__))
-            uri_file = os.path.join(repo_dir, "image_uri.txt")
-            try:
-                with open(uri_file, "r", encoding="utf-8") as f:
-                    contents = f.read().strip()
-                    image_uri = contents if contents else None
-            except FileNotFoundError:
-                image_uri = None
+            env_specific = os.path.join(repo_dir, f"image_uri.{deploy_env}.txt")
+            default_file = os.path.join(repo_dir, "image_uri.txt")
+            for candidate in (env_specific, default_file):
+                try:
+                    with open(candidate, "r", encoding="utf-8") as f:
+                        contents = f.read().strip()
+                        if contents:
+                            image_uri = contents
+                            break
+                except FileNotFoundError:
+                    continue
 
         def parse_repo_and_ref(uri: str) -> tuple[Optional[str], Optional[str]]:
             # Formats:
@@ -170,12 +192,13 @@ class ShootflowInfraStack(Stack):
             self, "IngestFunction",
             code=code,
             timeout=Duration.seconds(60),
-            function_name=f"{CdkStack.of(self).stack_name}-Ingest",
+            function_name=f"{fn_name_prefix}-Ingest",
             environment={
                 "SHOOTFLOW_DDB_TABLE": metadata_table.table_name,
                 "SHOOTFLOW_S3_BUCKET": upload_bucket.bucket_name,
                 "LAMBDA_TARGET": "shootflow.handlers.s3_ingest:handler",
                 "LAMBDA_ADAPTER": "sqs_s3",
+                "ENV_FOR_DYNACONF": deploy_env,
             }
         )
         metadata_table.grant_read_write_data(ingest_fn)
@@ -196,12 +219,13 @@ class ShootflowInfraStack(Stack):
             code=code,
             timeout=Duration.seconds(600),
             memory_size=512,
-            function_name=f"{CdkStack.of(self).stack_name}-FlickrPoster",
+            function_name=f"{fn_name_prefix}-FlickrPoster",
             environment={
                 "SHOOTFLOW_DDB_TABLE": metadata_table.table_name,
                 "SHOOTFLOW_S3_BUCKET": upload_bucket.bucket_name,
                 "LAMBDA_TARGET": "shootflow.handlers.flickr_poster:handler",
                 "LAMBDA_ADAPTER": "passthrough",
+                "ENV_FOR_DYNACONF": deploy_env,
             }
         )
         metadata_table.grant_read_write_data(flickr_poster_fn)
