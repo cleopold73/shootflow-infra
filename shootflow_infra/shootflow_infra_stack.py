@@ -33,63 +33,28 @@ class ShootflowInfraStack(Stack):
         # Tag all resources in this stack with the environment for easy UI identification
         Tags.of(self).add("Environment", deploy_env)
 
-        # Keep a single ECR repo across environments
-        ecr_repo = ecr.Repository(self, "ShootflowEcrRepository", repository_name="shootflow-ecr-repo")
+        # ECR repository is managed by a separate stack; import by name for all environments
+        ecr_repo = ecr.Repository.from_repository_name(
+            self, "ShootflowEcrRepository", repository_name="shootflow-ecr-repo"
+        )
 
         # Parameterize Lambda function name prefix per environment (overridable)
         fn_name_prefix = self.node.try_get_context("functionNamePrefix") or os.getenv("FUNCTION_NAME_PREFIX") or f"{CdkStack.of(self).stack_name}-{deploy_env}"
 
-        ecr_publish_role = iam.Role(
-            self,
-            "ShootflowEcrPublishRole",
-            assumed_by=iam.FederatedPrincipal(
-                f"arn:aws:iam::{account_id}:oidc-provider/token.actions.githubusercontent.com",
-                {
-                    "StringEquals": {
-                        "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-                    },
-                    "StringLike": {
-                        "token.actions.githubusercontent.com:sub": "repo:cleopold73/shootflow*:*"
-                    }
-                },
-                "sts:AssumeRoleWithWebIdentity"
-            ),
-            description="Role for GitHub Actions to publish Docker images to ECR"
-        )
-        ecr_publish_role.add_to_policy(
-            iam.PolicyStatement(
-                actions=[
-                    'ecr:GetAuthorizationToken',
-                    'ecr:BatchCheckLayerAvailability',
-                    'ecr:GetDownloadUrlForLayer',
-                    'ecr:BatchGetImage',
-                    'ecr:InitiateLayerUpload',
-                    'ecr:UploadLayerPart',
-                    'ecr:CompleteLayerUpload',
-                    'ecr:PutImage',
-                    'ecr:CreateRepository',
-                    'ecr:DescribeRepositories',
-                ],
-                resources=[ecr_repo.repository_arn],
-            )
-        )
+        bucket_name = f"shootflowupload-{deploy_env}"
+        # Safer prod, convenient dev: retain in prod, auto-delete objects in non-prod to avoid delete failures
+        auto_delete_objects = deploy_env != "production"
+        bucket_removal_policy = RemovalPolicy.RETAIN if deploy_env == "production" else RemovalPolicy.DESTROY
 
-        ecr_publish_role.add_to_policy(
-            iam.PolicyStatement(
-                actions=["ecr:GetAuthorizationToken"],
-                resources=["*"]
-            )
-        )
-
-        bucket_name = "shootflowupload" if deploy_env == "production" else f"shootflowupload-{deploy_env}"
         upload_bucket = s3.Bucket(
             self, "ShootflowUploadBucket",
             bucket_name=bucket_name,
-            removal_policy=RemovalPolicy.DESTROY
+            removal_policy=bucket_removal_policy,
+            auto_delete_objects=auto_delete_objects
         )
 
         # ADD: DLQ for failed SQS messages
-        dlq_name = None if deploy_env == "production" else f"shootflow-ingest-dlq-{deploy_env}"
+        dlq_name = f"shootflow-ingest-dlq-{deploy_env}"
         dlq = sqs.Queue(
             self, "IngestDlq",
             retention_period=Duration.days(14),
@@ -97,7 +62,7 @@ class ShootflowInfraStack(Stack):
         )
 
         # ADD: Main SQS queue receiving S3 notifications
-        ingest_queue_name = None if deploy_env == "production" else f"shootflow-ingest-{deploy_env}"
+        ingest_queue_name = f"shootflow-ingest-{deploy_env}"
         ingest_queue = sqs.Queue(
             self, "IngestQueue",
             # Must be greater than the Lambda timeout (set below to 60s)
@@ -115,7 +80,7 @@ class ShootflowInfraStack(Stack):
             # , s3.NotificationKeyFilter(prefix="uploads/", suffix=".jpg")  # optional filters
         )
 
-        table_name = None if deploy_env == "production" else f"shootflow-photo-metadata-{deploy_env}"
+        table_name = f"shootflow-photo-metadata-{deploy_env}"
         metadata_table = dynamodb.Table(
             self, "ShootFlowPhotoMetadata",
             partition_key=dynamodb.Attribute(name="photoId", type=dynamodb.AttributeType.STRING),

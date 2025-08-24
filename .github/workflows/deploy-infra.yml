@@ -21,6 +21,77 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      ecr: ${{ steps.filter.outputs.ecr }}
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+    - name: Detect changes
+      id: filter
+      uses: dorny/paths-filter@v3
+      with:
+        filters: |
+          ecr:
+            - 'shootflow_infra/ecr_stack.py'
+            - 'app.py'
+
+  deploy_ecr:
+    needs: changes
+    if: needs.changes.outputs.ecr == 'true'
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Configure AWS credentials via OIDC
+      uses: aws-actions/configure-aws-credentials@v2
+      with:
+        role-to-assume: arn:aws:iam::477763023369:role/ShootflowOIDCRole
+        aws-region: us-east-1
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install pipx
+      run: |
+        python3 -m pip install --user pipx
+        python3 -m pipx ensurepath
+
+    - name: Install Poetry
+      run: |
+        pipx install poetry==1.8.4
+
+    - name: Install dependencies
+      run: poetry install
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '20'
+
+    - name: Install AWS CDK CLI
+      run: npm install -g aws-cdk@2.1024.0
+
+    - name: Synthesize ECR stack
+      run: |
+        VENV_PATH=$(poetry env info --path)
+        source "$VENV_PATH/bin/activate"
+        cdk synth ShootflowEcrStack
+      env:
+        AWS_DEFAULT_REGION: us-east-1
+
+    - name: Deploy ECR stack
+      run: |
+        VENV_PATH=$(poetry env info --path)
+        source "$VENV_PATH/bin/activate"
+        cdk deploy --require-approval never ShootflowEcrStack
+      env:
+        AWS_DEFAULT_REGION: us-east-1
+
   deploy_dev:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
