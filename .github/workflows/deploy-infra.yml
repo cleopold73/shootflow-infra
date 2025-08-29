@@ -167,7 +167,7 @@ jobs:
           issue-title: "Approve production deployment"
           issue-body: "Approve to proceed with production deployment for commit ${{ github.sha }}."
           exclude-workflow-initiator: false
-          timeout-minutes: 1440
+          timeout-minutes: 5
 
   deploy_production:
     needs: [approve_production]
