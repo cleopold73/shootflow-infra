@@ -214,3 +214,52 @@ class ShootflowInfraStack(Stack):
             schedule=events.Schedule.cron(minute="0", hour="14"),
             targets=[events_targets.LambdaFunction(flickr_poster_fn)]
         )
+
+        # Third Lambda: Flickr Public Sync
+        # noinspection PyTypeChecker
+        flickr_public_sync_fn: _lambda.IFunction = _lambda.DockerImageFunction(
+            self, "FlickrPublicSyncFunction",
+            code=code,
+            timeout=Duration.seconds(1200),
+            memory_size=512,
+            function_name=f"{fn_name_prefix}-FlickrPublicSync",
+            environment={
+                "SHOOTFLOW_DDB_TABLE": metadata_table.table_name,
+                "SHOOTFLOW_S3_BUCKET": upload_bucket.bucket_name,
+                "LAMBDA_TARGET": "shootflow.handlers.flickr_public_sync:handler",
+                "LAMBDA_ADAPTER": "passthrough",
+                "ENV_FOR_DYNACONF": deploy_env,
+            }
+        )
+        metadata_table.grant_read_write_data(flickr_public_sync_fn)
+
+        # Grant Flickr public sync Lambda read access to the "FLICKR-API" secret
+        flickr_secret.grant_read(flickr_public_sync_fn)
+
+        # Fourth Lambda: Flickr Score Refresher
+        # noinspection PyTypeChecker
+        flickr_score_refresher_fn: _lambda.IFunction = _lambda.DockerImageFunction(
+            self, "FlickrScoreRefresher",
+            code=code,
+            timeout=Duration.seconds(1200),
+            memory_size=512,
+            function_name=f"{fn_name_prefix}-FlickrScoreRefresher",
+            environment={
+                "SHOOTFLOW_DDB_TABLE": metadata_table.table_name,
+                "SHOOTFLOW_S3_BUCKET": upload_bucket.bucket_name,
+                "LAMBDA_TARGET": "shootflow.handlers.flickr_score_refresher:handler",
+                "LAMBDA_ADAPTER": "passthrough",
+                "ENV_FOR_DYNACONF": deploy_env,
+            }
+        )
+        metadata_table.grant_read_write_data(flickr_score_refresher_fn)
+
+        # Grant Flickr poster Lambda read access to the "FLICKR-API" secret
+        flickr_secret.grant_read(flickr_score_refresher_fn)
+
+        # Trigger Flickr Poster daily around 8am US Central (14:00 UTC)
+        events.Rule(
+            self, "FlickrPosterScheduleRule",
+            schedule=events.Schedule.cron(minute="0", hour="10"),
+            targets=[events_targets.LambdaFunction(flickr_score_refresher_fn)]
+        )
