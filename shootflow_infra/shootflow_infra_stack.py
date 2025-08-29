@@ -254,12 +254,12 @@ class ShootflowInfraStack(Stack):
         )
         metadata_table.grant_read_write_data(flickr_score_refresher_fn)
 
-        # Grant Flickr poster Lambda read access to the "FLICKR-API" secret
+        # Grant Flickr Score Refresher Lambda read access to the "FLICKR-API" secret
         flickr_secret.grant_read(flickr_score_refresher_fn)
 
-        # Trigger Flickr Poster daily around 8am US Central (14:00 UTC)
+        # Trigger Flickr Score Refresher daily around 8am US Central (14:00 UTC)
         events.Rule(
-            self, "FlickrPosterScheduleRule",
+            self, "FlickrScoreRefresherScheduleRule",
             schedule=events.Schedule.cron(minute="0", hour="10"),
             targets=[events_targets.LambdaFunction(flickr_score_refresher_fn)]
         )
