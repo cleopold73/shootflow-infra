@@ -220,7 +220,7 @@ class ShootflowInfraStack(Stack):
         flickr_public_sync_fn: _lambda.IFunction = _lambda.DockerImageFunction(
             self, "FlickrPublicSyncFunction",
             code=code,
-            timeout=Duration.seconds(1200),
+            timeout=Duration.seconds(900),
             memory_size=512,
             function_name=f"{fn_name_prefix}-FlickrPublicSync",
             environment={
@@ -241,7 +241,7 @@ class ShootflowInfraStack(Stack):
         flickr_score_refresher_fn: _lambda.IFunction = _lambda.DockerImageFunction(
             self, "FlickrScoreRefresher",
             code=code,
-            timeout=Duration.seconds(1200),
+            timeout=Duration.seconds(900),
             memory_size=512,
             function_name=f"{fn_name_prefix}-FlickrScoreRefresher",
             environment={
