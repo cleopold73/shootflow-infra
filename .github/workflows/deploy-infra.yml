@@ -154,6 +154,7 @@ jobs:
     needs: [deploy_dev]
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
+    timeout-minutes: 6
     permissions:
       issues: write
       contents: read
